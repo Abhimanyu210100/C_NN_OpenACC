@@ -4,6 +4,9 @@
 #include <time.h>
 
 /*
+ 
+Raghav's Copy
+
 Program to pre-process an image using convolution and predict the class of the image using neural net.
 
 Ensure input is a file with tab separated pixel values with equal width and height.
@@ -270,7 +273,9 @@ int** convolve(ConvLayer C, int **input)
 
 }
 double* softmax(double x[]) { 
-
+	/*
+	Softmax activation function for output layer.
+	*/
 	double sum=0.0, num[input_size];
 	static double ratio[input_size];
 	for (int i = 0; i < input_size; ++i)
@@ -287,10 +292,16 @@ double* softmax(double x[]) {
 }
 
 double sigmoid(double x) {
+	/*
+	Sigmoid activation function for neural network nodes
+	*/
 	return 1/(1+expf(-x));
 }
 
 double dSigmoid(double x) {
+	/*
+	Derivative of sigmoid function for back propogation calculations.
+	*/
 	return sigmoid(x)*sigmoid(1-x);
 }
 
@@ -306,8 +317,8 @@ double printarr(double x[], int size) {
 int main(){
 	
 	char image_files[input_size][30] = {
-		"image.csv",
-		"image1.csv"
+		"image_csv_files/image.csv",
+		"image_csv_files/image1.csv"
 	};
 
 	double x[input_size][nfeatures];
