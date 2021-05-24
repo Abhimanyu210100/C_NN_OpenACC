@@ -7,8 +7,6 @@
 #include <sys/time.h>
 
 /*
- 
-Abhimanyu's Copy
 
 Program to pre-process an image using convolution and predict the class of the image using neural net.
 
@@ -34,14 +32,15 @@ Custom convolution > Average Pooling > Fully connected hidden layer > Output
 // NN macros 
 #define N 5
 #define input_size 5766
-#define no_epoch 10000
+#define no_epoch 200
 #define lr 0.01
 #define hidden_nodes 10
 #define output_labels 7
 #define nfeatures 16
 
 // parallelisation macros
-#define ngangs 2000
+#define ngangs 2500
+
 void getImage(FILE *inputFile, int input[image_size][image_size])
 {
 	/*
@@ -53,13 +52,11 @@ void getImage(FILE *inputFile, int input[image_size][image_size])
 	Returns:
 	int **input		 	image pixel values, 2D array [image_size][image_size]
 	*/
-	//#pragma acc parallel loop
     for (int i = 0; i < image_size; i++)
     {
         for (int j = 0; j < image_size; j++)
         {
             fscanf(inputFile, " %d", &input[i][j]);
-			//printf("%d,",input[i][j]);
         }
     }
 
@@ -79,7 +76,6 @@ int** getLabels(FILE *inputFile)
 	*/
 	int** input;
 	input = (int **) malloc(sizeof(int *) * 5766);
-	//#pragma acc parallel loop
     for (int i = 0; i < 5766; i++)
     {
         input[i] = (int *) malloc(sizeof(int) * 7);
@@ -171,28 +167,6 @@ void setHyperParamConvKernel(int kernel[3][3])
     return;
 }
 
-void softmax(double x[], double ratio[]) { 
-	/*
-	Softmax activation function for output layer.
-	*/
-	//#pragma acc data create(ratio,num)
-	
-	double sum=0.0, num[output_labels];
-	// static double ratio[output_labels];
-	for (int i = 0; i < output_labels; ++i)
-	{
-		num[i] = expl(x[i]);
-		sum+=expl(x[i]);
-	}
-	// Doesn't help without present
-	//#pragma acc parallel loop
-	for (int i = 0; i < output_labels; ++i)
-	{
-		ratio[i] = num[i]/sum;
-	}
-	// return ratio; 
-}
-
 double sigmoid(double x) {
 	/*
 	Sigmoid activation function for neural network nodes
@@ -271,12 +245,10 @@ int main(){
 		strcat(path,".csv");
 		while(1) {
 			if(access(path,R_OK)==0) {
-				// printf("Processing file: %s\n", path);
 				fpi = fopen(path,"r");
 				break;
 			}
 			else {
-				//printf("Skipping file: %s\n", path);
 				strcpy(path,"image_csv_files/");
 				strcat(path,image_files[file_counter++]);
 				strcat(path,".csv");
@@ -288,7 +260,6 @@ int main(){
 		getImage(fpi,image);
 
 		
-		//#pragma acc kernels
 		#pragma acc data copyin(edge, sharp, manual, image[0:image_size][0:image_size]) create(i1[0:image_size][0:image_size],i2[0:conv_1_size][0:conv_1_size],i3[0:conv_1_size][0:conv_1_size],i4[0:conv_2_size][0:conv_2_size],i5[0:conv_2_size][0:conv_2_size],i6[0:final_2d_size][0:final_2d_size]) copyout(i6[:][:])
 		{
 
@@ -418,7 +389,6 @@ int main(){
 		}
 
 		k=0;
-		//#pragma acc loop
 		for(i=0;i<final_2d_size;i++)
 		{
 			for(j=0;j<final_2d_size;j++)
@@ -449,26 +419,20 @@ int main(){
 	double wo[hidden_nodes][output_labels];
 
 	srand(time(0)+rand());
-	// #pragma acc kernels
 	for (int i = 0; i < nfeatures; ++i)
 	{
 		for (int j = 0; j < hidden_nodes; ++j)
 		{
-			// srand(time(0)+rand());
 			wh[i][j] = ((double)rand())/((double)RAND_MAX);
-			// srand(time(0)+rand());
 			bh[j] = ((double)rand())/((double)RAND_MAX);
 		}
 	}
 	srand(time(0)+rand());
-	// #pragma acc kernels
 	for (int i = 0; i < hidden_nodes; ++i)
 	{
 		for (int j = 0; j < output_labels; ++j)
 		{
-			// srand(time(0)+rand());
 			wo[i][j] = ((double)rand())/((double)RAND_MAX);
-			// srand(time(0)+rand());
 			bo[i] = ((double)rand())/((double)RAND_MAX);
 		}
 	}
@@ -510,12 +474,11 @@ int main(){
 
 for (int epoch = 0; epoch < no_epoch; epoch++)
     {
-		#pragma acc data create(zh,ah,zo,ao,dcost_dzo,dzo_dwo,dcost_wo,dcost_bo,dzo_dah,dcost_dah,dah_dzh,dzh_dwh,dcost_wh,dcost_bh,temp_mat,temp2) copyin(x,wh,bh,wo,bo) copyout(ao,bo,bh,wo,wh)
+		#pragma acc data create(zh,ah,zo,ao,dcost_dzo,dcost_bo,dzo_dwo,dcost_wo,dzo_dah,dcost_dah,dah_dzh,dcost_bh,dzh_dwh,temp_mat,dcost_wh) copyin(x,labels[0:5766][0:7],wh,bh,wo,bo) copyout(ao,wh,bh,wo,bo)
 		{
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(zh,bh,ah)
 			for (size_t i = 0; i < input_size; i++)
     		{
-				//#pragma acc parallel loop
         		for (size_t j = 0; j < hidden_nodes; j++)
         		{
             		zh[i][j] = 0.0;
@@ -529,13 +492,11 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
             		ah[i][j]=sigmoid(zh[i][j]);
         		}
     		}
-			// Correct till here
-
-
-    		#pragma acc kernels
+		
+		
+			#pragma acc parallel loop num_gangs(ngangs) present(zo,ah,wo,bo,ao)
     		for (size_t i = 0; i < input_size; i++)
     		{
-				// double temp[output_labels],temp2[output_labels];
 				double sum = 0.0;
         		for (size_t j = 0; j < output_labels; j++)
         		{
@@ -545,7 +506,6 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
                 		zo[i][j] += ah[i][k]*wo[k][j];
             		}
             		zo[i][j] += bo[j];
-            		// temp[j] = zo[i][j];
 					sum+=exp(zo[i][j]); //denominator for softmax
         		}
 				// softmax
@@ -553,23 +513,11 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 				{
 					ao[i][j] = exp(zo[i][j])/sum;
 				}
-				
-
-
-        		// for (size_t j = 0; j < output_labels; j++)
-        		// {
-            	// 	ao[i][j] = temp2[j];
-				// // ao[i][j] = (ao[i][j]<0.000001 && ao[i][j]>0) ? 0.000001:ao[i][j];
-        		// }
-        
     		}
-    		// free(temp2);
-		
-			// Correct upto here
 
 			// Backpropogation
 			// Phase 1
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) present(labels[0:5766][0:7],dcost_dzo,dcost_bo,ao,dzo_dwo,ah)
     		for (size_t i = 0; i < input_size; i++)
     		{
         		for (size_t j = 0; j < output_labels; j++)
@@ -585,9 +533,7 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		}   
     		}
 
-			// correct till here
-
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(dcost_wo,dzo_dwo,dcost_dzo)
     		for (size_t i = 0; i < hidden_nodes; i++)
     		{
         		for (size_t j = 0; j < output_labels; j++)
@@ -600,11 +546,10 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 					// dcost_wo[i][j] = (dcost_wo[i][j]<0.000001 && dcost_wo[i][j]>0) ? 0.000001:dcost_wo[i][j];
         		}
     		}
-
-			// correct till here
+		
 
     		// Phase 2
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(dzo_dah,wo)
     		for (size_t i = 0; i < hidden_nodes; i++)
     		{
         		for (size_t j = 0; j < output_labels; j++)
@@ -613,9 +558,9 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 					// dzo_dah[i][j] = (dzo_dah[i][j]<0.000001 && dzo_dah[i][j]>0) ? 0.000001:dzo_dah[i][j];
         		}
     		}
+		
 
-			// correct till here
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) present(dcost_dah,dcost_bh,dcost_dzo,dzo_dah,dah_dzh)
     		for (size_t i = 0; i < input_size; i++)
     		{
         		for (size_t j = 0; j < hidden_nodes; j++)
@@ -637,8 +582,7 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		} 
     		}
 
-			// correct till here (check dah_dzh) Round off errors?
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(dcost_dah,dah_dzh,temp_mat)
 			for (size_t i = 0; i < input_size; i++)
 			{
 				for (size_t j = 0; j < hidden_nodes; j++)
@@ -647,9 +591,9 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 					// temp_mat[i][j] = (temp_mat[i][j]<0.000001 && temp_mat[i][j]>0) ? 0.000001:temp_mat[i][j];
 				}
 			}
-		
-    		// Issue in this loop
-			#pragma acc kernels
+
+
+			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(dcost_wh,dzh_dwh,temp_mat)
 			for (size_t i = 0; i < nfeatures; i++)
     		{
         		for (size_t j = 0; j < hidden_nodes; j++)
@@ -663,21 +607,9 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		}
     		}
 
-			// for (size_t i = 0; i < nfeatures; i++)
-			// {
-			// 	for (size_t j = 0; j < hidden_nodes; j++)
-			// 	{
-			// 		printf("%f\t",dcost_wh[i][j]);
-			// 	}
-			// 	printf("\n");
-			// }
-			// printf("%f\n",temp_mat[2829][0]);
-			// printf("%f\n",dah_dzh[282][0]);
-			// printf("%f\n",dcost_dah[2829][0]);
-
 
     		// Updating Weights for each layer
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(wh,dcost_wh)
     		for (size_t i = 0; i < nfeatures; i++)
     		{
         		for (size_t j = 0; j < hidden_nodes; j++)
@@ -686,7 +618,7 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		}
     		}
 
-    		#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) present(dcost_bh)
     		for (size_t i = 0; i < hidden_nodes; i++)
     		{
 				double temp3=0.0;
@@ -696,7 +628,7 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		}
         		bh[i] -= lr*temp3;
     		}
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(dcost_wo,wo)
     		for (size_t i = 0; i < hidden_nodes; i++)
     		{
         		for (size_t j = 0; j < output_labels; j++)
@@ -704,7 +636,7 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
             		wo[i][j] -= lr*dcost_wo[i][j];
         		}   
     		}
-			#pragma acc kernels
+			#pragma acc parallel loop num_gangs(ngangs) present(dcost_bo,bo)
     		for (size_t i = 0; i < output_labels; i++)
     		{
 				double temp3=0.0;
@@ -714,17 +646,8 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		}
         		bo[i] -= lr*temp3;
     		}
-
 		}
-
-		// for (size_t i = 0; i < input_size; i++)
-		// {
-		// 	for (size_t j = 0; j < output_labels; j++)
-		// 	{
-		// 		printf("%f\t",ao[i][j]);
-		// 	}
-		// 	printf("\n");
-		// }
+		
 		
 
 
@@ -749,10 +672,13 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 				}	
 			}
 		}
-		acc = (double)count/input_size;
-		max_acc = (acc>=temp_acc) ? acc:max_acc;
-		epoch_opt = (acc>=temp_acc) ? epoch:epoch_opt;
-		temp_acc=max_acc;
+        if (epoch>0)
+        {
+            acc = (double)count/input_size;
+            max_acc = (acc>=temp_acc) ? acc:max_acc;
+            epoch_opt = (acc>=temp_acc) ? epoch:epoch_opt;
+            temp_acc=max_acc;
+        }
 		
 		if (epoch%100==0)
         {
@@ -766,10 +692,17 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 		}
 		
     }
-
 	gettimeofday(&stop, NULL);
-	printf("Solver execution time = %lu microseconds\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec);
+    unsigned long tot_time = (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec;
+	printf("Solver execution time = %lu microseconds\n", tot_time);
     
+    FILE* fpi3;
+    fpi3=fopen("time_vals.csv","a");
 
+	// num_gangs,time,parallel_true
+    fprintf(fpi3,"%d,%lu,1\n",ngangs,tot_time);
+    fclose(fpi3);
+
+    free(labels);
     return 0;
 }
