@@ -2,6 +2,11 @@
 
 Convolution plus Neural Network written in C/C++ and parallelised in OpenACC
 
+## **Dataset:**
+The dataset was taken from NIST Ultra High Carbon Steel Micrographs. 6 images were extacted from each image in the data set and it is available in the given drive link.
+https://drive.google.com/file/d/1ghYcp5nsUYo9bgHaRmfRKr-cAlzyJClr/view?usp=sharing
+Labels are provided in the folder 'nist_dataset'
+
 ## **Task:** 
 
 Classifying SEM images of microstructures into 7 different categories.
@@ -25,6 +30,8 @@ No libraries apart from the in-built C libraries were used.
 
 ## **Implementation:**
 *The code shown below was run and tested on AQUA computing cluster*
+
+The images must be saved in the folder named 'image_csv_files' present at the same level as convNetV1.c.
 
 To run the Neural Network in parallel OpenACC was used. To get a detailed description of the time used per parallel block of the code set `PGI_ACC_TIME=1` else `PGI_ACC_TIME=0`. The command lines below can be used to compile the code in parallel.
 
