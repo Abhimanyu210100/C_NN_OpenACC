@@ -20,7 +20,7 @@ Input > Edge detection convolution > Average Pooling > Sharpen convolution > Ave
 Custom convolution > Average Pooling > Fully connected hidden layer > Output
 
 256 > 256 > 64 > 64 > 16 > 16 > 4 (flattened to 16) >
-20 > 7 (output)
+10 > 7 (output)
 */
 
 // conv macros
@@ -34,12 +34,12 @@ Custom convolution > Average Pooling > Fully connected hidden layer > Output
 #define input_size 5766
 #define no_epoch 200
 #define lr 0.01
-#define hidden_nodes 10
+#define hidden_nodes 7
 #define output_labels 7
 #define nfeatures 16
 
 // parallelisation macros
-#define ngangs 2500
+#define ngangs 50
 
 void getImage(FILE *inputFile, int input[image_size][image_size])
 {
@@ -66,13 +66,13 @@ void getImage(FILE *inputFile, int input[image_size][image_size])
 int** getLabels(FILE *inputFile)
 {
 	/*
-	Get image from file and save to array.
+	Get labels from file and save to array.
 	
 	Arguments:
-	FILE *inputFile		Tab separated pixel values file (rows as rows)
+	FILE *inputFile		Tab separated label values file (rows as output for a sample)
 	
 	Returns:
-	int **input		 	image pixel values, 2D array [image_size][image_size]
+	int **input		 	label values, 2D array [input_size][output_labels]
 	*/
 	int** input;
 	input = (int **) malloc(sizeof(int *) * 5766);
@@ -91,13 +91,7 @@ int** getLabels(FILE *inputFile)
 void setEdgeConvKernel(int kernel[3][3])
 {
 	/*
-	Generate instance of structure with an edge detection kernel and input size
-	
-	Arguments:
-	ConvLayer *convInput		
-	int size					Input size of convolution
-	Returns:
-	-
+	Generate instance of edge detection kernel
 	*/
 	
 	// Kernel set
@@ -117,13 +111,7 @@ void setEdgeConvKernel(int kernel[3][3])
 void setSharpenConvKernel(int kernel[3][3])
 {
 	/*
-	Generate instance of structure with a sharpen kernel and input size
-	
-	Arguments:
-	ConvLayer *convInput		
-	int size					Input size of convolution
-	Returns:
-	-
+	Generate instance of sharpen kernel
 	*/
 	
 	// Kernel set
@@ -144,13 +132,7 @@ void setSharpenConvKernel(int kernel[3][3])
 void setHyperParamConvKernel(int kernel[3][3])
 {
 	/*
-	Generate instance of structure with a custom kernel and input size
-	
-	Arguments:
-	ConvLayer *convInput		
-	int size					Input size of convolution
-	Returns:
-	-
+	Generate instance of custom kernel
 	*/
 
 	// Kernel set
@@ -189,19 +171,17 @@ double printarr(double x[], int size) {
 	printf("\n");
 	return 0;
 }
-void writeToFile(FILE* fpi, int** layer, int size){
-	for(int i=0;i<size;i++)
-	{
-		for(int j=0;j<size;j++)
-		{
-			fprintf(fpi,"%d\t",layer[i][j]);
-		}
-		fprintf(fpi,"\n");
-	}
-}
-
 double loss_function(int labels1[][output_labels], double ao1[][output_labels])
 {
+	/*
+	Cross entropy loss function
+	Arguments:
+	int labels1				2D array of labels  [input_size][output_labels]
+	double ao1				2D array of outputs [input_size][output_labels]
+	Returns:
+	double loss				Loss function value
+
+	*/
     double loss =0.0;
     for (size_t i = 0; i < input_size ; i++)
     {
@@ -458,7 +438,7 @@ int main(){
 		
 	// }
 	
-
+	// Defining all variables for the Neural Network
     double zh[input_size][hidden_nodes], ah[input_size][hidden_nodes];
 	double zo[input_size][output_labels], ao[input_size][output_labels];
 	double dcost_dzo[input_size][output_labels], dzo_dwo[input_size][hidden_nodes];
@@ -476,6 +456,7 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
     {
 		#pragma acc data create(zh,ah,zo,ao,dcost_dzo,dcost_bo,dzo_dwo,dcost_wo,dzo_dah,dcost_dah,dah_dzh,dcost_bh,dzh_dwh,temp_mat,dcost_wh) copyin(x,labels[0:5766][0:7],wh,bh,wo,bo) copyout(ao,wh,bh,wo,bo)
 		{
+			// Forward Feed
 			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(zh,bh,ah)
 			for (size_t i = 0; i < input_size; i++)
     		{
@@ -523,13 +504,11 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		for (size_t j = 0; j < output_labels; j++)
         		{
             		dcost_dzo[i][j] = ao[i][j]-labels[i][j];
-            		// dcost_dzo[i][j] = (dcost_dzo[i][j]<0.000001 && dcost_dzo[i][j]>0) ? 0.000001:dcost_dzo[i][j];
 					dcost_bo[i][j] = dcost_dzo[i][j];
         		}
         		for (size_t j = 0; j < hidden_nodes; j++)
         		{
             		dzo_dwo[i][j] = ah[i][j];
-					// dzo_dwo[i][j] = (dzo_dwo[i][j]<0.000001 && dzo_dwo[i][j]>0) ? 0.000001:dzo_dwo[i][j];
         		}   
     		}
 
@@ -543,7 +522,6 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
             		{
                 		dcost_wo[i][j]+=dzo_dwo[k][i]*dcost_dzo[k][j];
             		}
-					// dcost_wo[i][j] = (dcost_wo[i][j]<0.000001 && dcost_wo[i][j]>0) ? 0.000001:dcost_wo[i][j];
         		}
     		}
 		
@@ -555,7 +533,6 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
         		for (size_t j = 0; j < output_labels; j++)
         		{
             		dzo_dah[i][j] = wo[i][j];
-					// dzo_dah[i][j] = (dzo_dah[i][j]<0.000001 && dzo_dah[i][j]>0) ? 0.000001:dzo_dah[i][j];
         		}
     		}
 		
@@ -572,8 +549,6 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
             		}
             		dah_dzh[i][j] = dSigmoid(zh[i][j]);
             		dcost_bh[i][j] = dcost_dah[i][j]*dah_dzh[i][j];
-					// dah_dzh[i][j] = (dah_dzh[i][j]<0.000001 && dah_dzh[i][j]>0) ? 0.000001:dah_dzh[i][j];
-					// dcost_bh[i][j] = (dcost_bh[i][j]<0.000001 && dcost_bh[i][j]>0) ? 0.000001:dcost_bh[i][j];
         		}
         
         		for (size_t j = 0; j < nfeatures; j++)
@@ -588,7 +563,6 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 				for (size_t j = 0; j < hidden_nodes; j++)
 				{
 					temp_mat[i][j] = dah_dzh[i][j]*dcost_dah[i][j];
-					// temp_mat[i][j] = (temp_mat[i][j]<0.000001 && temp_mat[i][j]>0) ? 0.000001:temp_mat[i][j];
 				}
 			}
 
@@ -601,14 +575,13 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
             		dcost_wh[i][j] = 0.0;
             		for (size_t k = 0; k < input_size; k++)
             		{
-                		dcost_wh[i][j] += dzh_dwh[k][i]*temp_mat[k][j];// (dah_dzh[k][j]*dcost_dah[k][j]);//dzh_dwh[k][i]*
-						// dcost_wh[i][j] = (dcost_wh[i][j]<0.000001 && dcost_wh[i][j]>0) ? 0.000001:dcost_wh[i][j];
+                		dcost_wh[i][j] += dzh_dwh[k][i]*temp_mat[k][j];
             		}
         		}
     		}
 
 
-    		// Updating Weights for each layer
+    		// Updating Weights for the hidden nodes and output layer
 			#pragma acc parallel loop num_gangs(ngangs) collapse(2) present(wh,dcost_wh)
     		for (size_t i = 0; i < nfeatures; i++)
     		{
@@ -652,12 +625,9 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
 
 
         double loss_val= 0.0;
-        // feedforward(x,wh,bh,wo,bo,zh,ah,zo,ao);
-        // backprpogation(x, labels, wh, bh, wo, bo, zh, ah, zo, ao, dcost_dzo, dzo_dwo,
-        // dcost_wo, dcost_bo, dzo_dah, dcost_dah, dah_dzh, dzh_dwh, dcost_wh, dcost_bh);
-        
 		double max_val=0.0;
-		double count=0.0, acc=0.0;;
+		double count=0.0, acc=0.0;
+		// Computing the accuracy and the loss function
 		for (size_t i = 0; i < input_size; i++)
 		{
 			for (size_t j = 0; j < output_labels; j++)
@@ -699,8 +669,8 @@ for (int epoch = 0; epoch < no_epoch; epoch++)
     FILE* fpi3;
     fpi3=fopen("time_vals.csv","a");
 
-	// num_gangs,time,parallel_true
-    fprintf(fpi3,"%d,%lu,1\n",ngangs,tot_time);
+	// num_gangs,num_epochs,num_hidden,time,parallel_true
+    fprintf(fpi3,"%d,%d,%d,%lu,1\n",ngangs,no_epoch,hidden_nodes,tot_time);
     fclose(fpi3);
 
     free(labels);
