@@ -3,8 +3,7 @@
 Convolution plus Neural Network written in C/C++ and parallelised in OpenACC
 
 ## **Dataset:**
-The dataset was taken from NIST Ultra High Carbon Steel Micrographs. 6 images were extacted from each image in the data set and it is available in the given drive link.
-https://drive.google.com/file/d/1ghYcp5nsUYo9bgHaRmfRKr-cAlzyJClr/view?usp=sharing
+The dataset was taken from NIST Ultra High Carbon Steel Micrographs. 6 images were extacted from each image in the data set and it is available in the given [drive link](https://drive.google.com/file/d/1ghYcp5nsUYo9bgHaRmfRKr-cAlzyJClr/view?usp=sharing).
 Labels are provided in the folder 'nist_dataset'
 
 ## **Task:** 
@@ -15,6 +14,10 @@ Classifying SEM images of microstructures into 7 different categories.
 - Sobel Kernel was used for edge detection on images along the verticle and horizontal direction
 - Standard sharpen kernel was used to increase the contrast between the edge detected in a lower dimension representation of the image
 - Convoluted Neural Network: Softmax function is used to compute the belongingness to a particular class. Cross-Entropy loss function is used to compute the loss for a multi-class classification problem
+- Input > Edge detection convolution > Average Pooling > Sharpen convolution > Average Pooling > 
+Custom convolution > Average Pooling > Fully connected hidden layer > Output
+- 256 > 256 > 64 > 64 > 16 > 16 > 4 (flattened to 16) >
+10 > 7 (output)
 
 ## **Image Preprocessing:**
 
@@ -40,3 +43,7 @@ module load nvhpc-compiler
 export PGI_ACC_TIME=1
 pgcc -acc -Minfo=accel convNetV1.c
 ```
+
+## **Older Versions**
+
+All the older versions of the code and the edit history can be found [here](https://github.com/raghavmallampalli/C_NN_OpenACC)
